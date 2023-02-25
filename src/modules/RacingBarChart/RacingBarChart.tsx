@@ -1,4 +1,6 @@
-import fetchData from "./fetchData";
+import { groups, pairs } from "d3";
+import { useEffect, useState } from "react";
+import getKeyframes from "./getKeyframes";
 
 type Params = {
   /**
@@ -129,13 +131,30 @@ export default function RacingBarChart(params: Params) {
     },
   } = params;
 
-  fetchData()
-    .then((data) => {
-      console.log(data);
-    })
-    .catch((error) => {
-      console.error(error);
-    });
+  const [keyframes, setKeyframes] = useState<any[]>([]);
+  const [prev, setPrev] = useState<Map<any, any>>(new Map());
+  const [next, setNext] = useState<Map<any, any>>(new Map());
 
+  useEffect(() => {
+    getKeyframes({ range, interpolations })
+      .then((_keyframes) => {
+        const _nameframes = groups(
+          keyframes.flatMap(([, data]) => data),
+          (d) => d.name
+        );
+        const _prev = new Map(
+          _nameframes.flatMap(([, data]) => pairs(data, (a, b) => [b, a]))
+        );
+        const _next = new Map(_nameframes.flatMap(([, data]) => pairs(data)));
+        setKeyframes(_keyframes);
+        setPrev(_prev);
+        setNext(_next);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  }, [range, interpolations]);
+
+  if (keyframes.length === 0) return <div>Loading...</div>;
   return <div>RacingBarChart</div>;
 }
