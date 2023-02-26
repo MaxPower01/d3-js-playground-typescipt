@@ -3,7 +3,7 @@ import rank from "./rank";
 import { RacingChartKeyframe } from "./types";
 
 export default async function getKeyframes(params: {
-  range: number;
+  n: number;
   interpolations: number;
 }) {
   const data = await csv("/category-brands.csv");
@@ -18,7 +18,7 @@ export default async function getKeyframes(params: {
   )
     .map(([date, data]) => [new Date(date), data])
     .sort(([a], [b]) => ascending(a as Date, b as Date));
-  const { range, interpolations } = params;
+  const { n, interpolations } = params;
   const keyframes: RacingChartKeyframe[] = [];
   let ka: any;
   let a: any;
@@ -33,7 +33,7 @@ export default async function getKeyframes(params: {
           valueAccessor: (name) =>
             (a.get(name) || 0) * (1 - t) + (b.get(name) || 0) * t,
           names,
-          range,
+          range: n,
         }),
       ]);
     }
@@ -43,7 +43,7 @@ export default async function getKeyframes(params: {
     rank({
       valueAccessor: (name) => b.get(name) || 0,
       names,
-      range,
+      range: n,
     }),
   ]);
   const nameframes = groups(

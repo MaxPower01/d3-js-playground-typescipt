@@ -1,13 +1,11 @@
-import { useState } from "react";
 import "./App.css";
+import defaultParams from "./modules/RacingBarChart/defaultRacingBarChartParams";
 import RacingBarChart from "./modules/RacingBarChart/RacingBarChart";
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
     <div className="App">
-      <RacingBarChart />
+      <RacingBarChart params={defaultParams} />
     </div>
   );
 }
