@@ -1,4 +1,14 @@
-import { axisTop, create, range, scaleBand, scaleLinear } from "d3";
+import {
+  axisTop,
+  create,
+  easeLinear,
+  format,
+  interpolateNumber,
+  range,
+  scaleBand,
+  scaleLinear,
+  utcFormat,
+} from "d3";
 import { useEffect, useMemo, useState } from "react";
 import getKeyframes from "./getKeyframes";
 import { RacingBarChartParams, RacingChartKeyframe } from "./types";
@@ -30,9 +40,12 @@ export default function RacingBarChart({ params }: Params) {
   const [xScale, setXScale] = useState<any>(null);
   const [yScale, setYScale] = useState<any>(null);
 
+  const dateFormat = utcFormat("%Y");
+  const numberFormat = format(",d");
+
   useEffect(() => {
     getKeyframes({ n, interpolations })
-      .then((data) => {
+      .then(async (data) => {
         const _keyframes = data.keyframes;
         const _prev = data.prev;
         const _next = data.next;
@@ -60,7 +73,18 @@ export default function RacingBarChart({ params }: Params) {
         /* -------------------------------------------------------------------------- */
         /*              TODO: Extract these functions to a separate file              */
         /* -------------------------------------------------------------------------- */
-        const bars = () => {
+
+        const textTween = (a: any, b: any) => {
+          const i = interpolateNumber(a, b);
+          return function (t: any) {
+            // @ts-ignore
+            this.textContent = numberFormat(i(t));
+          };
+        };
+
+        const setBars = (
+          svg: d3.Selection<SVGSVGElement, undefined, null, undefined>
+        ) => {
           let bar = svg
             .append("g")
             .attr("fill-opacity", params.opacity.barFill)
@@ -107,7 +131,10 @@ export default function RacingBarChart({ params }: Params) {
                   .attr("width", (d: any) => _xScale(d.value) - _xScale(0))
               ));
         };
-        const yAxis = () => {
+
+        const setYAxis = (
+          svg: d3.Selection<SVGSVGElement, undefined, null, undefined>
+        ) => {
           const g = svg
             .append("g")
             .attr("transform", `translate(0,${chartMargin.top})`);
@@ -126,6 +153,231 @@ export default function RacingBarChart({ params }: Params) {
           };
         };
 
+        const setLabels = (
+          svg: d3.Selection<SVGSVGElement, undefined, null, undefined>
+        ) => {
+          let valueSVG = svg
+            .append("g")
+            .style("font", "bold 12px var(--sans-serif)")
+            .style("font-variant-numeric", "tabular-nums")
+            .attr("text-anchor", "end")
+            .selectAll("text");
+
+          let rankSVG = svg
+            .append("g")
+            .style("font", "bold 12px var(--sans-serif)")
+            .style("font-variant-numeric", "tabular-nums")
+            .attr("text-anchor", "start")
+            .selectAll("text");
+
+          let avatarSVG = svg
+            .append("g")
+            .attr("text-anchor", "middle")
+            .selectAll("image");
+
+          return ([date, data]: any, transition: any) => {
+            valueSVG = valueSVG
+              .data(data.slice(0, n), (d: any) => d.name)
+              .join(
+                (enter) =>
+                  enter
+                    .append("text")
+                    .attr(
+                      "transform",
+                      (d) =>
+                        `translate(${_xScale(
+                          (prev.get(d) || d).value
+                        )},${_yScale((prev.get(d) || d).rank)})`
+                    )
+                    .attr("y", _yScale.bandwidth() / 2)
+                    .attr("x", params.size.margin * -1)
+                    .attr("dy", "-0.25em")
+                    .text((d: any) => d.name)
+                    .style("font-weight", "bold")
+                    .style("font-style", "italic")
+                    .style("font-size", `${params.size.text}px`)
+                    .style("fill", params.color.barText)
+                    .call((text) =>
+                      text
+                        .append("tspan")
+                        .attr("fill-opacity", params.opacity.barValue)
+                        .attr("font-weight", "normal")
+                        .attr("x", params.size.margin * -1)
+                        .attr("dy", "1.15em")
+                    ),
+                (update) => update,
+                (exit) =>
+                  exit
+                    .transition(transition)
+                    .remove()
+                    .attr(
+                      "transform",
+                      (d) =>
+                        `translate(${_xScale(
+                          (next.get(d) || d).value
+                        )},${_yScale((next.get(d) || d).rank)})`
+                    )
+                    .call((g) =>
+                      g
+                        .select("tspan")
+                        .tween("text", (d: any) =>
+                          textTween(d.value, (next.get(d) || d).value)
+                        )
+                    )
+              )
+              .call((bar) =>
+                bar
+                  .transition(transition)
+                  .attr(
+                    "transform",
+                    (d: any) =>
+                      `translate(${_xScale(d.value)},${_yScale(d.rank)})`
+                  )
+                  .call((g) =>
+                    g
+                      .select("tspan")
+                      .tween("text", (d: any) =>
+                        textTween((prev.get(d) || d).value, d.value)
+                      )
+                  )
+              );
+
+            const translateLeft = 0;
+
+            rankSVG = rankSVG
+              .data(data.slice(0, n), (d: any) => d.name)
+              .join(
+                (enter) =>
+                  enter
+                    .append("text")
+                    .attr(
+                      "transform",
+                      (d) =>
+                        `translate(${translateLeft},${_yScale(
+                          (prev.get(d) || d).rank
+                        )})`
+                    )
+                    .call((text) =>
+                      text
+                        .append("tspan")
+                        .attr("fill-opacity", 1)
+                        .attr("y", _yScale.bandwidth() / 2)
+                        .attr("font-weight", "normal")
+                        // .attr("dy", "0.35em")
+                        .attr("dy", `${params.size.text / 2}px`)
+                        .attr("fill", params.color.yTicks)
+                        .style("font-size", `${params.size.text}px`)
+                    ),
+                (update) => update
+              )
+              .call((bar) =>
+                bar
+                  .transition(transition)
+                  .attr(
+                    "transform",
+                    (d: any) => `translate(${translateLeft},${_yScale(d.rank)})`
+                  )
+                  .call((g) =>
+                    g
+                      .select("tspan")
+                      .tween("text", (d: any) =>
+                        textTween((prev.get(d) || d).rank + 1, d.rank + 1)
+                      )
+                  )
+              );
+
+            avatarSVG = avatarSVG
+              .data(data.slice(0, n), (d: any) => d.name)
+              .join(
+                (enter) =>
+                  enter
+                    .append("image")
+                    // .attr("xlink:href", (d) => d.avatar)
+                    .attr(
+                      "xlink:href",
+                      (d) =>
+                        "https://png.pngtree.com/png-vector/20220817/ourmid/pngtree-cartoon-man-avatar-vector-ilustration-png-image_6111064.png"
+                    )
+                    .attr("width", params.size.avatar)
+                    .attr("height", params.size.avatar)
+                    .attr("x", 8)
+                    .attr(
+                      "y",
+                      params.size.bar / 2 -
+                        params.size.avatar / 2 -
+                        params.size.margin / 2
+                    )
+                    .attr(
+                      "transform",
+                      (d: any) =>
+                        `translate(${_xScale(
+                          (prev.get(d) || d).value
+                        )},${_yScale((prev.get(d) || d).rank)})`
+                    ),
+                (update) => update
+              )
+              .call((bar) =>
+                bar
+                  .transition(transition)
+                  .attr(
+                    "transform",
+                    (d: any) =>
+                      `translate(${_xScale(d.value)},${_yScale(d.rank)})`
+                  )
+              );
+          };
+        };
+
+        const setTicker = (
+          svg: d3.Selection<SVGSVGElement, undefined, null, undefined>
+        ) => {
+          const now = svg
+            .append("text")
+            .style("font", `bold ${params.size.bar}px var(--sans-serif)`)
+            .style("font-variant-numeric", "tabular-nums")
+            .attr("text-anchor", "end")
+            .attr("x", params.size.chartWidth - params.size.margin)
+            .attr("y", chartMargin.top + params.size.bar * (n - 0.45))
+            .attr("dy", "0.32em")
+            .text(dateFormat(_keyframes[0][0]));
+
+          return ([date]: any, transition: any) => {
+            transition.end().then(() => now.text(dateFormat(date)));
+          };
+        };
+
+        const updateBars = setBars(svg);
+        const updateAxis = setYAxis(svg);
+        const updateLabels = setLabels(svg);
+        const updateTicker = setTicker(svg);
+
+        const chartContainer = document.body.querySelector("#chart");
+        const svgNode = svg.node();
+
+        console.log(chartContainer);
+
+        if (chartContainer && svgNode) {
+          chartContainer.appendChild(svgNode);
+
+          for (const keyframe of _keyframes) {
+            const transition = svg
+              .transition()
+              .duration(params.animationDuration)
+              .ease(easeLinear);
+
+            // Extract the top bar’s value.
+            _xScale.domain([0, keyframe[1][0].value]);
+
+            updateAxis(keyframe, transition);
+            updateBars(keyframe, transition);
+            updateLabels(keyframe, transition);
+            updateTicker(keyframe, transition);
+
+            // invalidation.then(() => svg.interrupt());
+            await transition.end();
+          }
+        }
+
         /* -------------------------------------------------------------------------- */
         /*             ./TODO: Extract these functions to a separate file             */
         /* -------------------------------------------------------------------------- */
@@ -135,7 +387,14 @@ export default function RacingBarChart({ params }: Params) {
       });
   }, [range, interpolations]);
 
-  if (keyframes.length === 0) return <div>Loading...</div>;
-
-  return <div>RacingBarChart</div>;
+  return (
+    <div>
+      <div
+        id="chart"
+        style={{
+          width: params.size.chartWidth,
+        }}
+      ></div>
+    </div>
+  );
 }
